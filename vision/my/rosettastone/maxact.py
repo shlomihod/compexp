@@ -103,28 +103,9 @@ def get_conv_layers(model):
                 if isinstance(layer, torch.nn.Conv2d)}
 
 
-# https://gist.github.com/Tushar-N/680633ec18f5cb4b47933da7d10902af
-def harvest_activations(model, dataloader, module_names=None):#, layer_indices=None):
+# todo, make into a context manager!!!
+def hook_activations(model, modules):
 
-    #conv_layers = get_conv_layers(model)
-
-    #assert layer_names is None or layer_indices is None
-
-    #if layer_names is not None:
-    #    conv_layers = {name: layer for name, layer in conv_layers.items()
-    #                   if name in layer_names}
-    #    assert set(conv_layers.keys()) == set(layer_names)
-    
-    modules = {name: model._modules.get(name) for name in module_names}
-
-    # TODO: refactor, also buggy when using pos and neg indices that
-    # refer to the smae item
-    # Also: it assumes that keys are orderd    
-    #if layer_indices is not None:
-    #    orig_conv_layers = conv_layers.copy()
-    #    conv_layer_names = list(orig_conv_layers.keys())
-    #    conv_layers = {conv_layer_names[idx]: orig_conv_layers[conv_layer_names[idx]]
-    #                   for idx in layer_indices}
 
     activations = defaultdict(list)
 
@@ -135,12 +116,25 @@ def harvest_activations(model, dataloader, module_names=None):#, layer_indices=N
     
     for name, layer in modules.items():
         handels[name] = layer.register_forward_hook(partial(save_activation, name))
+        
+    return activations, handles
+
+
+
+# https://gist.github.com/Tushar-N/680633ec18f5cb4b47933da7d10902af
+def harvest_activations(model, dataloader, module_names=None):
+  
+    modules = {name: model._modules.get(name) for name in module_names}
+    
+    activations, handles = hook_activations(model, modules)
+    
 
     num_correct = 0
     num_total = 0
 
     for batch in dataloader:
         x, y = batch
+        # TODO: device
         x = x.cuda()
         y = y.cuda()
         
