@@ -11,6 +11,7 @@ from collections import OrderedDict
 from imageio import imread
 from multiprocessing import Pool, cpu_count
 from multiprocessing.pool import ThreadPool
+import atexit
 from scipy.ndimage.interpolation import zoom
 from sklearn.model_selection import train_test_split
 from torchvision import transforms
@@ -523,6 +524,9 @@ class SegmentationPrefetcher:
             original_sigint_handler = setup_sigint()
             self.pool = Pool(processes=n_procs, initializer=setup_sigint)
             restore_sigint(original_sigint_handler)
+    
+        atexit.register(self.pool.close)
+            
         # Prefilter the image indexes of interest
         if start is None:
             start = 0
