@@ -14,10 +14,13 @@ from torch.nn.modules.upsampling import Upsample
 from lucent.optvis import render#, param, transform, objectives
 
 
-UPSAMPLE = Upsample(size=(224, 224), mode='bilinear', align_corners=False)
+# TODO: as parameter
+SIZE = 227 #224
+
+UPSAMPLE = Upsample(size=(SIZE, SIZE), mode='bilinear', align_corners=False)
 
 
-def crop_by_max_activation(raw_acts, img, quantile_threshold=0.1, shape=(224, 224)):
+def crop_by_max_activation(raw_acts, img, quantile_threshold=0.1, shape=(SIZE, SIZE)):
     upsampled_acts = UPSAMPLE(raw_acts[None, None, :, :]).cpu().numpy()#upsample(raw_acts.cpu().numpy(), shape)
     mask_threshold = np.quantile(upsampled_acts, 1 - quantile_threshold)
     mask = upsampled_acts > mask_threshold
@@ -112,10 +115,10 @@ def hook_activations(model, modules):
     def save_activation(name, mod, inp, out):
         activations[name].append(out.cpu())
     
-    handels = {}
+    handles = {}
     
     for name, layer in modules.items():
-        handels[name] = layer.register_forward_hook(partial(save_activation, name))
+        handles[name] = layer.register_forward_hook(partial(save_activation, name))
         
     return activations, handles
 
@@ -124,7 +127,14 @@ def hook_activations(model, modules):
 # https://gist.github.com/Tushar-N/680633ec18f5cb4b47933da7d10902af
 def harvest_activations(model, dataloader, module_names=None):
   
-    modules = {name: model._modules.get(name) for name in module_names}
+    if isinstance(module_names, dict):
+        modules = {name: 
+                   module_fn(model)
+                   for name, module_fn in module_names.items()}
+    else:
+        modules = {name: 
+                   model._modules.get(name)
+                   for name in module_names}
     
     activations, handles = hook_activations(model, modules)
     
@@ -156,7 +166,7 @@ def harvest_activations(model, dataloader, module_names=None):
     for k, v in all_activations.items():
         print (k, v.size(), modules[k])
     
-    for handle in handels.values():
+    for handle in handles.values():
         handle.remove()
 
     return all_activations
@@ -231,8 +241,9 @@ def set_seed(seed):
     random.seed(seed)
 
     
-def visualize_neuron(layer, neuron, model, activations, dataset):
+def visualize_neuron(layer, neuron, model, activations, dataset, with_lucent=True):
     plot_neuron_max_activations(activations, dataset, layer, neuron)
     plot_neuron_max_activations(activations, dataset, layer, neuron, cropped=False)
-    render.render_vis(model, f'{layer}:{neuron}', show_inline=True)
+    if with_lucent:
+        render.render_vis(model, f'{layer}:{neuron}', show_inline=True)
     
