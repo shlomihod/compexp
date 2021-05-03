@@ -346,8 +346,10 @@ def disentanglenet(disentanglenet_cls, model, neuron,
             dnet.equality_report()
 
         if verbose:
-            Print('Evaluate...')
-            print(evaluate(dnet, test_dataloader, device))
+            print('Evaluating...')
+        accs = evaluate(dnet, test_dataloader, device)
+        if verbose:
+            print(accs)
 
         if with_maxact:
             if verbose:
