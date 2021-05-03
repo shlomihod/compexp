@@ -13,6 +13,7 @@ from torch.nn.modules.upsampling import Upsample
 
 from lucent.optvis import render#, param, transform, objectives
 
+from rosettastone.utils import show_grid
 
 # TODO: as parameter
 SIZE = 227 #224
@@ -33,24 +34,6 @@ def crop_by_max_activation(raw_acts, img, quantile_threshold=0.1, shape=(SIZE, S
     cropped_img = img[None, :, min_:max_, min_:max_]
     return UPSAMPLE(cropped_img)
 
-
-def tensor2img(img):
-    npimg = img.numpy()
-    return np.transpose(npimg, (1,2,0))
-
-
-def show(img):
-    plt.imshow(tensor2img(img), interpolation='nearest')
-
-
-def show_grid(imgs, nrow=10, padding=5, figsize=None):
-    grid = torchvision.utils.make_grid(imgs,
-                                       nrow=nrow, padding=padding,
-                                       )#normalize=True)
-    if figsize is not None:
-        plt.subplots(1, figsize=figsize)
-        
-    return show(grid)
 
 def cosine_similarity_reprs(representations):
     representations = representations.cpu()
@@ -107,13 +90,15 @@ def get_conv_layers(model):
 
 
 # todo, make into a context manager!!!
-def hook_activations(model, modules):
+def hook_activations(model, modules, apply_fn=None):
 
+    if apply_fn is None:
+        apply_fn = lambda x: x
 
     activations = defaultdict(list)
 
     def save_activation(name, mod, inp, out):
-        activations[name].append(out.cpu())
+        activations[name].append(apply_fn(out.cpu()))
     
     handles = {}
     
@@ -125,7 +110,7 @@ def hook_activations(model, modules):
 
 
 # https://gist.github.com/Tushar-N/680633ec18f5cb4b47933da7d10902af
-def harvest_activations(model, dataloader, module_names=None):
+def harvest_activations(model, dataloader, module_names=None, apply_fn=None):
   
     if isinstance(module_names, dict):
         modules = {name: 
@@ -136,7 +121,7 @@ def harvest_activations(model, dataloader, module_names=None):
                    model._modules.get(name)
                    for name in module_names}
     
-    activations, handles = hook_activations(model, modules)
+    activations, handles = hook_activations(model, modules, apply_fn)
     
 
     num_correct = 0
@@ -241,9 +226,12 @@ def set_seed(seed):
     random.seed(seed)
 
     
-def visualize_neuron(layer, neuron, model, activations, dataset, with_lucent=True):
-    plot_neuron_max_activations(activations, dataset, layer, neuron)
-    plot_neuron_max_activations(activations, dataset, layer, neuron, cropped=False)
+def visualize_neuron(layer, neuron, model, activations, dataset, top_k=100, with_cropped=True, with_lucent=True):
+    if with_cropped:
+        plot_neuron_max_activations(activations, dataset, layer, neuron, top_k=top_k)
+    
+    plot_neuron_max_activations(activations, dataset, layer, neuron, top_k=top_k, cropped=False)
+    
     if with_lucent:
         render.render_vis(model, f'{layer}:{neuron}', show_inline=True)
     
