@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
+from rosettastone.maxact import harvest_activations, plot_neuron_max_activations
 from rosettastone.partial_freezing import freeze_conv2d_params, freeze_linear_params
 from rosettastone.utils import freezer, forward_up_to
 
@@ -26,7 +27,8 @@ def plot_concept_activation_line(forward_fn, concept_probs, neuron, device):
     sort_indices = np.argsort(acts)[::-1]
     acts = acts[sort_indices]
     y_concepts = y_concepts[sort_indices]
-    sns.scatterplot(x=range(len(acts)), y=acts, hue=y_concepts, ax=ax)
+    sns.scatterplot(x=range(len(acts)), y=acts, hue=y_concepts,
+                    hue_order=concepts, ax=ax)
     ax.set_ylabel('Mean Activation')
     ax.set_xlabel('Ordered Images')
     return ax
@@ -245,14 +247,13 @@ def succeeding_operation(orig_layer, neuron, orig_splitted_layer_size, device):
 def plot_maxact(dnet, dataset, dataloader, neuron, which, top_k):
     net = dnet.orig_net if which == 'orig' else dnet.splitted_net
     with torch.no_grad(): 
-        activations = maxact.harvest_activations(net, dataloader, {'layer': dnet.layer_getter})
-        print('SSS', activations['layer'].shape)
+        activations = harvest_activations(net, dataloader, {'layer': dnet.layer_getter})
         if which == 'orig':
-            ax1 = maxact.plot_neuron_max_activations(activations, dataset, 'layer', neuron, cropped=False, top_k=top_k)
+            ax1 = plot_neuron_max_activations(activations, dataset, 'layer', neuron, cropped=False, top_k=top_k)
             ax2 = None
         else:
-            ax1 = maxact.plot_neuron_max_activations(activations, dataset, 'layer', neuron, cropped=False, top_k=top_k)
-            ax2 = maxact.plot_neuron_max_activations(activations, dataset, 'layer', -1, cropped=False, top_k=top_k)
+            ax1 = plot_neuron_max_activations(activations, dataset, 'layer', neuron, cropped=False, top_k=top_k)
+            ax2 = plot_neuron_max_activations(activations, dataset, 'layer', -1, cropped=False, top_k=top_k)
         del activations
     return ax1, ax2
 
@@ -298,16 +299,16 @@ def disentanglenet(disentanglenet_cls, model, neuron,
         if with_maxact:
             if verbose:
                 print('Pre generate maxact plots...')
-            ax_init_orig_maxact, _ = plot_maxact(dnet, dataset, train_dataloader,
+            init_maxact_orig, _ = plot_maxact(dnet, dataset, train_dataloader,
                                                  config.neuron,
                                                  'orig', top_k=top_k)
 
-            ax_init_splitted_maxact_first, ax_init_second_maxact_splitted = plot_maxact(dnet, dataset, train_dataloader,
+            init_maxact_splitted_first, init_maxact_splitted_second = plot_maxact(dnet, dataset, train_dataloader,
                                                                                         config.neuron,
                                                                                         'splitted', top_k=top_k)
-            wandb.log({'init_orig_maxact': wandb.Image(ax_init_orig_maxact),
-                       'init_splitted_maxact_first': wandb.Image(ax_init_splitted_maxact_first),
-                       'init_second_maxact_splitted': wandb.Image(ax_init_second_maxact_splitted)})
+            wandb.log({'init_maxact_orig': wandb.Image(init_maxact_orig),
+                       'init_maxact_splitted_first': wandb.Image(init_maxact_splitted_first),
+                       'init_maxact_splitted_second': wandb.Image(init_maxact_splitted_second)})
 
         if with_prob:
             if verbose:
@@ -354,7 +355,14 @@ def disentanglenet(disentanglenet_cls, model, neuron,
         if with_maxact:
             if verbose:
                 print('Post generate maxact plots...')
-            # TODO
+
+            post_maxact_splitted_first, post_maxact_splitted_second = plot_maxact(dnet, dataset, train_dataloader,
+                                                                                        config.neuron,
+                                                                                        'splitted', top_k=top_k)
+            wandb.log({'post_maxact_splitted_first': wandb.Image(post_maxact_splitted_first),
+                       'post_maxact_splitted_second': wandb.Image(post_maxact_splitted_second)})
 
         if verbose:
             print('Done!')
+
+    return dnet
